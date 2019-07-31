@@ -56,12 +56,10 @@ var url1 = "https://book.qidian.com/info/53269#Catalog";
 //   if (err) throw err;
 //   // connection 即为当前一个可用的数据库连接
 // });
-
-function getLists(url) {
+function searchBook(name) {
 	return new Promise((resolve, reject) => {
-		// var url = "https://book.qidian.com/info/53269#Catalog"
 		var option = {
-			url: url,
+			url: encodeURI('https://www.qidian.com/search?kw=' + name),
 			proxy: 'http://10.9.26.13:8080',
 			// method: "POST",
 			// json: true,
@@ -69,6 +67,36 @@ function getLists(url) {
 			// 	"content-type": "application/json",
 			// },
 			// body: requestData
+		}
+
+		request(option, function(err, res) {
+			if (err) {
+				reject(err)
+			} else {
+				var $ = cheerio.load(res.body.toString()); //利用cheerio对页面进行解析
+				var bookList = [];
+				var lists = $('.book-mid-info')
+				$(lists).each(function() {
+					var item = {
+						title: $(this).find('h4 a').text().trim(),
+						url: 'https:' + $(this).find('h4 a').attr('href'),
+						author: $(this).find('a.name').text().trim(),
+						id: $(this).find('h4 a').attr('data-bid')
+					};
+					bookList.push(item);
+				});
+				resolve(bookList)
+			}
+		});
+	});
+}
+
+function getLists(url) {
+	return new Promise((resolve, reject) => {
+		// var url = "https://book.qidian.com/info/53269#Catalog"
+		var option = {
+			url: url,
+			proxy: 'http://10.9.26.13:8080'
 		}
 		request(option, function(err, res) {
 			if (err) {
@@ -95,7 +123,7 @@ function getContent(url) {
 	return new Promise((resolve, reject) => {
 		var option = {
 			url: url,
-			proxy: 'http://10.9.26.13:8080',
+			proxy: 'http://10.9.26.13:8080'
 		}
 		request(option, function(err, res) {
 			if (err) {
@@ -126,26 +154,39 @@ function getContent(url) {
 	});
 }
 
-getLists(url1).then(result => {
-	questions = result;
-}).catch( err => {
-	questions = err;
-})
 
+
+app.get('/search', function (req, res) {
+	searchBook(req.query.name).then(result => {
+		res.status(200);
+		res.json(result);
+	})
+});
 app.get('/getLists', function (req, res) {
-	res.status(200);
-	res.json(questions);
+	if(req.query.url) {
+		var url = req.query.url + '#Catalog';
+		getLists(url).then(result => {
+			res.status(200);
+			res.json(result);
+			questions = result;
+		}).catch( err => {
+			res.status(200);
+			res.json(err);
+		})
+	}
 });
 app.get('/getContent', function (req, res) {
-	questions.forEach( item => {
-		if(req.query.id * 1 === item.id * 1){
-			getContent(item.url).then(result => {
-				res.status(200);
-				res.json(result);
-			})
-			return false;
-		}
-	})
+	if(questions.length > 0) {
+		questions.forEach( item => {
+			if(req.query.id * 1 === item.id * 1){
+				getContent(item.url).then(result => {
+					res.status(200);
+					res.json(result);
+				})
+				return false;
+			}
+		})
+	}
 });
 app.listen(port, hostname, err => {
 	if (!err) {
